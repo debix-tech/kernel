@@ -1955,6 +1955,23 @@ static int fec_get_mac(struct net_device *ndev)
 			iap = (unsigned char *)&pdata->mac;
 #endif
 	}
+#if 1
+        /*
+         * polyhex John_gao get eeprom mac
+         */
+        {
+                extern void get_eeprom_mac(int index, char *mac);
+                char eeprom_mac[6];
+                get_eeprom_mac(2, eeprom_mac);
+                printk("GLS_MAC ens34 02 : %pM \n", eeprom_mac);
+                if(eeprom_mac[0] == 0x10 &&
+                                eeprom_mac[1] == 0x07 &&
+                                eeprom_mac[2] == 0x23){
+                        iap = eeprom_mac;
+                        netdev_err(ndev, "Use Polyhex MAC2 address: %pM\n", iap);
+                }
+        }
+#endif
 
 	/*
 	 * 4) FEC mac registers set by bootloader
@@ -2001,8 +2018,8 @@ static int phy_rtl8211e_led_fixup(struct phy_device *phydev)
 	if(phy_id1 == 0x1c && phy_id2 == 0xc916){ //RTL8211f 0xc916 
 		/*switch to extension page44*/
 		phy_write(phydev, 0x1f, 0xd04);
-		//phy_write(phydev, 0x10, 0x6d60); // Model A/B
-		phy_write(phydev, 0x10, 0x2f60);   // Model A/B SE
+		phy_write(phydev, 0x10, 0x6d60); // BMB08 
+		//phy_write(phydev, 0x10, 0x2f60);   // Model A/B SE
 
 		/*set led1(yellow) act*/
 		phy_write(phydev, 0x11, 0x8);

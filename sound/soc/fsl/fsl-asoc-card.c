@@ -642,14 +642,14 @@ void __set_gpio_spk(int enable)
 	}
 
 }
-
+static int is_hp_in = 0;
 void set_gpio_spk(int mute)
 {
-	struct fsl_asoc_card_priv *priv = mypriv;
+	//struct fsl_asoc_card_priv *priv = mypriv;
 
 	int enable = 0;
 
-	if(mute){
+        if(is_hp_in || mute){
 		enable = 0;
 	}else{
 		enable = 1;
@@ -664,8 +664,8 @@ static irqreturn_t hp_det_irq(int irq, void *dev_id)
         //struct platform_device *pdev = priv->pdev;
         //struct device *dev = &pdev->dev;
 
-	if(priv->hp_det > 0)
-	printk("GLS_AUDIO irq = %d \n", gpio_get_value(priv->hp_det));
+	//if(priv->hp_det > 0)
+	//printk("GLS_AUDIO irq = %d \n", gpio_get_value(priv->hp_det));
 	set_gpio_spk(0);
 
 	return IRQ_HANDLED;
@@ -678,23 +678,26 @@ static int hp_jack_event(struct notifier_block *nb, unsigned long event,
 
 	if (event & SND_JACK_HEADPHONE)	{
 		/* Disable speaker if headphone is plugged in */
-		snd_soc_dapm_disable_pin(dapm, "Ext Spk"); // original
+		//snd_soc_dapm_disable_pin(dapm, "Ext Spk"); // original
 	//add by polyhex
 		printk("es8316 %s hp in \n",__func__);
-		//snd_soc_dapm_enable_pin(dapm, "Headphone Jack");
+		snd_soc_dapm_enable_pin(dapm, "Headphone Jack");
 	//end add by polyhex
 
+		is_hp_in = 1;
 		//set_gpio_spk(priv,0);
 		set_gpio_spk(1);
 	}else {
 
-		snd_soc_dapm_enable_pin(dapm, "Ext Spk");// original
+		//snd_soc_dapm_enable_pin(dapm, "Ext Spk");// original
+		//snd_soc_dapm_disable_pin(dapm, "Ext Spk"); // original
 		//add by polyhex
 		printk("es8316 %s hp out \n",__func__);
 		//snd_soc_dapm_disable_pin(dapm, "Headphone Jack");
-		//snd_soc_dapm_enable_pin(dapm, "Headphone Jack");
+		snd_soc_dapm_enable_pin(dapm, "Headphone Jack");
 		//end add by polyhex
 		//set_gpio_spk(priv,1);
+		is_hp_in = 0;
 		if(onece_set)
 		set_gpio_spk(0);
 		else

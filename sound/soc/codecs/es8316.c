@@ -45,6 +45,8 @@ struct es8316_priv {
 	bool jd_inverted;
 };
 
+extern void set_gpio_spk(int mute);
+
 /*
  * ES8316 controls
  */
@@ -360,14 +362,74 @@ static const struct snd_soc_dapm_route es8316_dapm_routes[] = {
 	{"HPOR", NULL, "Headphone Out"},
 };
 
+static unsigned int rates_12288[] = {
+        8000, 12000, 16000, 24000, 24000, 32000, 48000, 96000,
+};
+
+static struct snd_pcm_hw_constraint_list constraints_12288 = {
+        .count  = ARRAY_SIZE(rates_12288),
+        .list   = rates_12288,
+};
+
+static unsigned int rates_112896[] = {
+        8000, 11025, 22050, 44100,
+};
+
+static struct snd_pcm_hw_constraint_list constraints_112896 = {
+        .count  = ARRAY_SIZE(rates_112896),
+        .list   = rates_112896,
+};
+
+static unsigned int rates_12[] = {
+        8000, 11025, 12000, 16000, 22050, 24000, 32000, 44100, 48000,
+        48000, 88235, 96000,
+};
+
+static struct snd_pcm_hw_constraint_list constraints_12 = {
+        .count  = ARRAY_SIZE(rates_12),
+        .list   = rates_12,
+};
+
+
+
 static int es8316_set_dai_sysclk(struct snd_soc_dai *codec_dai,
 				 int clk_id, unsigned int freq, int dir)
 {
 	struct snd_soc_component *component = codec_dai->component;
 	struct es8316_priv *es8316 = snd_soc_component_get_drvdata(component);
+	printk("GLS_AUDIO %s\n", __func__);
+#if 1
+	
+        switch (freq) {
+        case 11289600:
+        case 18432000:
+        case 22579200:
+        case 36864000:
+                es8316->sysclk_constraints.list = constraints_112896.list;
+		es8316->sysclk_constraints.count = constraints_112896.count;
+                es8316->sysclk = freq;
+                return 0;
+        case 12288000:
+        case 19200000:
+        case 16934400:
+        case 24576000:
+        case 33868800:
+                es8316->sysclk_constraints.list = constraints_12288.list;
+		es8316->sysclk_constraints.count = constraints_12288.count;
+                es8316->sysclk = freq;
+                return 0;
+        case 12000000:
+        case 24000000:
+                es8316->sysclk_constraints.list = constraints_12.list;
+		es8316->sysclk_constraints.count = constraints_12.count;
+                es8316->sysclk = freq;
+                return 0;
+        }
+
+
+#else
 	int i, ret;
 	int count = 0;
-
 	es8316->sysclk = freq;
 	es8316->sysclk_constraints.list = NULL;
 	es8316->sysclk_constraints.count = 0;
@@ -394,6 +456,7 @@ static int es8316_set_dai_sysclk(struct snd_soc_dai *codec_dai,
 		es8316->sysclk_constraints.count = count;
 	}
 
+#endif
 	return 0;
 }
 
@@ -405,6 +468,7 @@ static int es8316_set_dai_fmt(struct snd_soc_dai *codec_dai,
 	u8 serdata2 = 0;
 	u8 clksw;
 	u8 mask;
+	printk("GLS_AUDIO %s\n", __func__);
 
 	if ((fmt & SND_SOC_DAIFMT_MASTER_MASK) == SND_SOC_DAIFMT_CBP_CFP)
 		serdata1 |= ES8316_SERDATA1_MASTER;
@@ -442,6 +506,13 @@ static int es8316_set_dai_fmt(struct snd_soc_dai *codec_dai,
 	/* Enable BCLK and MCLK inputs in slave mode */
 	clksw = ES8316_CLKMGR_CLKSW_MCLK_ON | ES8316_CLKMGR_CLKSW_BCLK_ON;
 	snd_soc_component_update_bits(component, ES8316_CLKMGR_CLKSW, clksw, clksw);
+	//John_gao
+	{
+		u8 reg;
+	reg = snd_soc_component_read(component, 0x01);
+	printk("GLS_AUDIO %02x = %02x \n",  0x01, reg);
+	
+	}
 
 	return 0;
 }
@@ -452,6 +523,7 @@ static int es8316_pcm_startup(struct snd_pcm_substream *substream,
 	struct snd_soc_component *component = dai->component;
 	struct es8316_priv *es8316 = snd_soc_component_get_drvdata(component);
 
+	printk("GLS_AUDIO %s\n", __func__);
 	if (es8316->sysclk_constraints.list)
 		snd_pcm_hw_constraint_list(substream->runtime, 0,
 					   SNDRV_PCM_HW_PARAM_RATE,
@@ -464,6 +536,42 @@ static int es8316_pcm_hw_params(struct snd_pcm_substream *substream,
 				struct snd_pcm_hw_params *params,
 				struct snd_soc_dai *dai)
 {
+#if 1
+	struct snd_soc_component*component = dai->component;
+        int val = 0;
+
+	printk("GLS_AUDIO %s\n", __func__);
+        switch (params_format(params)) {
+        case SNDRV_PCM_FORMAT_S16_LE:
+                val = ES8316_DACWL_16;
+                break;
+        case SNDRV_PCM_FORMAT_S20_3LE:
+                val = ES8316_DACWL_20;
+                break;
+        case SNDRV_PCM_FORMAT_S24_LE:
+                val = ES8316_DACWL_24;
+                break;
+        case SNDRV_PCM_FORMAT_S32_LE:
+                val = ES8316_DACWL_32;
+                break;
+        default:
+                val = ES8316_DACWL_16;
+                break;
+        }
+
+        if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK)
+                snd_soc_component_update_bits(component, ES8316_SERDATA_DAC,
+                                    ES8316_DACWL_MASK, val);
+        else
+                snd_soc_component_update_bits(component, ES8316_SERDATA_ADC,
+                                    ES8316_ADCWL_MASK, val);
+
+
+//      printk("es8316 %s \n",__func__);
+        //John_gao  set Lin2
+        snd_soc_component_write(component, ES8316_ADC_PDN_LINSEL, 0x10);
+
+#else
 	struct snd_soc_component *component = dai->component;
 	struct es8316_priv *es8316 = snd_soc_component_get_drvdata(component);
 	u8 wordlen = 0;
@@ -515,16 +623,23 @@ static int es8316_pcm_hw_params(struct snd_pcm_substream *substream,
 	snd_soc_component_update_bits(component, ES8316_CLKMGR_ADCDIV2, 0xff, lrck_divider & 0xff);
 	snd_soc_component_update_bits(component, ES8316_CLKMGR_DACDIV1, 0x0f, lrck_divider >> 8);
 	snd_soc_component_update_bits(component, ES8316_CLKMGR_DACDIV2, 0xff, lrck_divider & 0xff);
+#endif
 	return 0;
 }
 
 static int es8316_mute(struct snd_soc_dai *dai, int mute, int direction)
 {
+	u8 reg;
+	printk("GLS_AUDIO %s\n", __func__);
+	set_gpio_spk(mute);
+	//John_gao get 0x1 
+	reg = snd_soc_component_read(dai->component, 0x01);
+	printk("GLS_AUDIO %02x = %02x \n",  0x01, reg);
 	snd_soc_component_update_bits(dai->component, ES8316_DAC_SET1, 0x20,
 			    mute ? 0x20 : 0);
 	return 0;
 }
-
+#define es8316_RATES SNDRV_PCM_RATE_8000_96000
 #define ES8316_FORMATS (SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S20_3LE | \
 			SNDRV_PCM_FMTBIT_S24_LE)
 
@@ -543,14 +658,14 @@ static struct snd_soc_dai_driver es8316_dai = {
 		.stream_name = "Playback",
 		.channels_min = 1,
 		.channels_max = 2,
-		.rates = SNDRV_PCM_RATE_8000_48000,
+		.rates = es8316_RATES,
 		.formats = ES8316_FORMATS,
 	},
 	.capture = {
 		.stream_name = "Capture",
 		.channels_min = 1,
 		.channels_max = 2,
-		.rates = SNDRV_PCM_RATE_8000_48000,
+		.rates = es8316_RATES,
 		.formats = ES8316_FORMATS,
 	},
 	.ops = &es8316_ops,
@@ -593,6 +708,7 @@ static irqreturn_t es8316_irq(int irq, void *data)
 
 	mutex_lock(&es8316->lock);
 
+	printk("GLS_AUDIO irq irq \n");
 	regmap_read(es8316->regmap, ES8316_GPIO_FLAG, &flags);
 	if (flags == 0x00)
 		goto out; /* Powered-down / reset */
@@ -715,6 +831,7 @@ static void es8316_disable_jack_detect(struct snd_soc_component *component)
 static int es8316_set_jack(struct snd_soc_component *component,
 			   struct snd_soc_jack *jack, void *data)
 {
+	printk("GLS_AUDIO %s\n", __func__);
 	if (jack)
 		es8316_enable_jack_detect(component, jack);
 	else
