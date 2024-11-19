@@ -1646,6 +1646,11 @@
 	status = "okay";
 };
 
+&{/reserved-memory/linux,cma} {
+       size = <0 0x1c000000>;
+       alloc-ranges = <0 0x40000000 0 0xC0000000>;
+};
+
 &mix_gpu_ml {
 	status = "okay";
 };
